@@ -1,9 +1,4 @@
-#导入NiceGUI
-import nicegui
+from nicegui import ui
 
-@nicegui.main
-def main():
-    nicegui.ui.label("Hello, NiceGUI!")
-
-if __name__ == "__main__":
-    nicegui.run()
+ui.label('Hello, NiceGUI!')
+ui.run()
