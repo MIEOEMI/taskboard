@@ -1,0 +1,228 @@
+// 任务行 / 动画勾选框 / 计数徽章 / 三列布局
+import { Store, TaskData } from "globals.slint";
+
+// ---- 计数徽章 ----
+export component Pill inherits Rectangle {
+    in property <string> text;
+    height: 18px;
+    min-width: pill-t.preferred-width + 14px;
+    border-radius: 9px;
+    background: rgba(76, 159, 112, 0.157);
+    Text {
+        pill-t := Text {
+            text: root.text;
+            color: #8fd6ac;
+            font-size: 10px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// ---- 呼吸小圆点 ----
+component PulseDot inherits Rectangle {
+    in property <bool> active: false;
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    opacity: active ? 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(Store.clock * 276.6deg)) : 0.75;
+}
+
+// ---- 动画勾选框：点击后填色 + 打勾动画 ----
+component AnimCheck inherits Rectangle {
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    property <float> p: 0;
+    animate p { duration: 240ms; easing: ease_out; }
+    callback checked();
+    ta := TouchArea {
+        clicked => {
+            if (root.p < 0.5) {
+                root.p = 1;
+                root.checked();
+            }
+        }
+    }
+    // 底：白 4.7% + 描边白 37%
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: 14px;
+        height: 14px;
+        border-radius: 4.5px;
+        background: rgba(255, 255, 255, 0.047);
+        border-width: 1.2px;
+        border-color: root.p > 0.02 ? #4c9f70 : (ta.has-hover ? rgba(255, 255, 255, 0.59) : rgba(255, 255, 255, 0.37));
+    }
+    // 上：勾选后填色（透明度随进度，形成「填色动画」）
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: 14px;
+        height: 14px;
+        border-radius: 4.5px;
+        background: #4c9f70;
+        border-width: 1.2px;
+        border-color: #4c9f70;
+        opacity: Math.clamp(p * 1.05, 0, 1);
+    }
+    // 打勾：随进度从左往右画出来
+    Rectangle {
+        clip: true;
+        width: 16px * Math.clamp(p * 1.2, 0, 1);
+        height: 16px;
+        Path {
+            commands: "M 4.2 8.4 L 6.9 11.1 L 11.9 5.2";
+            stroke: rgba(12, 18, 14, 0.92);
+            stroke-width: 1.9px;
+        }
+    }
+}
+
+// ---- 任务行：入场错峰淡入 + 悬停高亮 + 优先级色条 + 勾选后整行收起 ----
+component TaskRow inherits Rectangle {
+    in property <TaskData> data;
+    in property <int> row-index;
+    property <float> hover-t: ta.has-hover ? 1 : 0;
+    animate hover-t { duration: 150ms; easing: ease_out; }
+    property <float> spawn: 0;
+    property <float> collapse: data.dying ? 1 : 0;
+    animate collapse { duration: 220ms; delay: 200ms; easing: ease_in; }
+    init => {
+        spawn = data.is-new ? (Store.clock + row-index * 0.026) : (Store.clock - 10);
+    }
+    height: data.dying ? 26px * (1 - collapse) : 26px;
+    opacity: data.dying ? (1 - collapse) : Math.clamp((Store.clock - spawn) / 0.35, 0, 1);
+    border-radius: 8px;
+    clip: true;
+    background: rgba(255, 255, 255, 0.016 + 0.051 * hover-t);
+    border-width: ta.has-hover ? 1px : 0px;
+    border-color: rgba(255, 255, 255, 0.094);
+
+    ta := TouchArea {
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.up && data.dying == false) {
+                // 点行空白处不做事，只给勾选框
+            }
+        }
+    }
+
+    // 左侧优先级 / 逾期色条
+    Rectangle {
+        x: 1.5px;
+        y: 6px;
+        width: 2.4px;
+        height: max(6px, parent.height - 12px);
+        border-radius: 1.2px;
+        background: data.accent;
+        opacity: 0.27 + 0.69 * hover-t;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 8px;
+
+        AnimCheck {
+            y: 0;
+            checked => { Store.done(data.id); }
+        }
+        Rectangle {
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: data.title;
+                    color: #eef2f8;
+                    font-size: 12px;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    vertical-stretch: 0;
+                }
+                if data.high : Text {
+                    text: "●";
+                    color: #f2b544;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                    width: 10px;
+                }
+                Rectangle {}   // stretch
+                if data.time != "" : Text {
+                    text: data.time;
+                    color: data.overdue ? #ff8080 : #a9b2c0;
+                    font-size: 10px;
+                    width: 56px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+                if data.overdue : PulseDot {
+                    y: 4px;
+                    active: true;
+                    background: #ff6b6b;
+                }
+            }
+        }
+    }
+}
+
+// ---- 三列之一：列头（点 + 名称 + 计数徽章）+ 任务列表 ----
+export component Column inherits Rectangle {
+    in property <[TaskData]> rows;
+    in property <string> label;
+    in property <color> dot-color;
+    in property <int> pill-text;
+    background: transparent;
+    // 在父级 HorizontalLayout 里三等分，且纵向撑满（否则高度塌成 0，整列不可见）
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+    min-width: 180px;
+
+    VerticalLayout {
+        spacing: 5px;
+        vertical-stretch: 1;
+
+        HorizontalLayout {
+            spacing: 6px;
+            height: 18px;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                y: 6px;
+                border-radius: 3px;
+                background: root.dot-color;
+            }
+            Text {
+                text: root.label;
+                color: #8b93a3;
+                font-size: 11px;
+                letter-spacing: 1px;
+                vertical-alignment: center;
+            }
+            Rectangle {}   // stretch
+            Pill {
+                text: root.pill-text;
+                y: 0;
+            }
+        }
+
+        Flickable {
+            vertical-stretch: 1;
+            content-height: root.rows.length == 0 ? 16px : root.rows.length * 29px;
+
+            VerticalLayout {
+                spacing: 3px;
+                for t[index] in root.rows : TaskRow {
+                    data: t;
+                    row-index: index;
+                }
+                if root.rows.length == 0 : Text {
+                    text: "暂无任务";
+                    color: #6b7484;
+                    font-size: 10px;
+                }
+            }
+        }
+    }
+}
