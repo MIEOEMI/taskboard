@@ -209,7 +209,7 @@ fn screen_size() -> (f32, f32) {
 #[cfg(target_os = "windows")]
 fn screen_size() -> (f32, f32) {
     unsafe {
-        use windows_sys::Win32::Graphics::Gdi::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
         (
             GetSystemMetrics(SM_CXSCREEN) as f32,
             GetSystemMetrics(SM_CYSCREEN) as f32,
@@ -234,12 +234,14 @@ fn start_bottom_keepalive(weak: slint::Weak<AppWindow>, preview: Rc<Cell<bool>>)
 }
 
 #[cfg(target_os = "windows")]
-fn hwnd_of(app: &AppWindow) -> Option<isize> {
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let h = app.window().window_handle().ok()?;
-    match h.as_raw() {
-        RawWindowHandle::Win32(w) => Some(w.hwnd.as_ptr() as isize),
-        _ => None,
+fn hwnd_of(_app: &AppWindow) -> Option<isize> {
+    // Slint 的 Window 不实现 HasWindowHandle，改为按标题查找自己的窗口。
+    // 标题在 app.slint 里固定为 WINDOW_TITLE。
+    use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
+    let title: Vec<u16> = "TaskBoardWidget\0".encode_utf16().collect();
+    unsafe {
+        let h = FindWindowW(std::ptr::null(), title.as_ptr());
+        if h.is_null() { None } else { Some(h as isize) }
     }
 }
 
@@ -514,6 +516,7 @@ fn main() {
         let models2 = models.clone();
         let tx_worker = tx_worker.clone();
         let tx_tray = tx_tray.clone();
+        let preview_flag_loop = preview_flag.clone();
         let selftest_fired = Rc::new(Cell::new(false));
         let timer = Box::leak(Box::new(slint::Timer::default()));
         timer.start(slint::TimerMode::Repeated, Duration::from_millis(100), move || {
@@ -524,7 +527,7 @@ fn main() {
                     TrayCmd::Center => {
                         center_on_screen(&app);
                     }
-                    TrayCmd::Preview => preview_on_top(&app, preview_flag.clone()),
+                    TrayCmd::Preview => preview_on_top(&app, preview_flag_loop.clone()),
                     TrayCmd::Quit => std::process::exit(0),
                 }
             }
