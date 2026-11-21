@@ -3,7 +3,8 @@
 贴在 Windows / Ubuntu 桌面上的 Vikunja 任务看板：置底、无边框、圆角半透明、不进任务栏、不抢焦点。
 三列（今天 / 未来 7 天 / 以后），勾选即回写，一句话加任务。
 
-Rust + Slint 实现。**实测峰值内存 68 MB**，单文件成品 Windows 11.7 MB / Linux 17.8 MB。
+Rust + Slint 实现（软件渲染后端）。实测挂件进程峰值 **约 37 MB**
+（对照：PySide6 旧版 93 MB，Slint 默认 GL 后端 158 MB）。成品体积 Windows 11.7 MB / Linux 17.8 MB。
 
 ## 下载
 
