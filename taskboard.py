@@ -38,7 +38,8 @@ from PySide6.QtCore import (
     QSettings, Qt, QTimer, QVariantAnimation, Signal,
 )
 from PySide6.QtGui import (
-    QAction, QBrush, QColor, QFont, QIcon, QLinearGradient, QPainter,
+    QAction, QBrush, QColor, QFont, QGuiApplication, QIcon, QLinearGradient,
+    QPainter,
     QPainterPath, QPen, QPixmap, QRadialGradient,
 )
 from PySide6.QtWidgets import (
@@ -78,7 +79,12 @@ def load_config() -> dict[str, str]:
     if not cfg["VIKUNJA_URL"]:
         candidates = [
             os.path.expanduser("~/.config/vikunja/env"),
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+        ]
+        # PyInstaller 单文件模式：__file__ 在临时解压目录里，.env 应该放在 exe 旁边
+        base = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
+                else os.path.dirname(os.path.abspath(__file__)))
+        candidates += [
+            os.path.join(base, ".env"),
             os.path.join(os.environ.get("APPDATA", ""), "vikunja", "env"),
         ]
         for path in candidates:
@@ -955,6 +961,61 @@ class Widget(QWidget):
         self.status.setText(f"已同步 {datetime.now(TZ):%H:%M:%S}")
         self.render()
 
+    # -- 找回窗口 ------------------------------------------------------------- #
+    def center_on_primary(self) -> None:
+        """移到主屏中央，并记住这个位置。"""
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        self.move(scr.center() - QPoint(self.width() // 2, self.height() // 2))
+        self.settings.setValue("pos", self.pos())
+
+    def clamp_to_screen(self) -> None:
+        """保存的位置不在任何屏幕内时，回主屏中央（防止窗口开在不存在的地方）。"""
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        p = self.pos()
+        inside = (scr.left() - 40 <= p.x() <= scr.right() - 120
+                  and scr.top() - 40 <= p.y() <= scr.bottom() - 80)
+        if not inside:
+            self.center_on_primary()
+
+    def preview_on_top(self, seconds: int = 6) -> None:
+        """临时切到置顶模式找窗口，几秒后恢复贴桌面。"""
+        self.setWindowFlag(Qt.WindowStaysOnBottomHint, False)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.show()
+        self.raise_()
+        self.center_on_primary()
+        self.status.setText(f"置顶预览 {seconds}s")
+        QTimer.singleShot(seconds * 1000, self.restore_desktop_mode)
+
+    def restore_desktop_mode(self) -> None:
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
+        self.setWindowFlag(Qt.WindowStaysOnBottomHint, True)
+        self.show()
+        self._start_bottom_keepalive()
+
+    def _start_bottom_keepalive(self) -> None:
+        """Windows: HWND_BOTTOM 只在启动时压一次，随后会被顶回来或沉到壁纸下，
+        所以每 3 秒重压一次，维持「其他窗口之下、桌面之上」。"""
+        if sys.platform != "win32":
+            return
+        if getattr(self, "_bottom_timer", None) is None:
+            self._bottom_timer = QTimer(self)
+            self._bottom_timer.timeout.connect(self._push_bottom)
+        self._bottom_timer.start(3000)
+
+    def _push_bottom(self) -> None:
+        if self.locked:
+            return
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            HWND_BOTTOM = 1
+            SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE = 0x1, 0x2, 0x10
+            user32.SetWindowPos(int(self.winId()), HWND_BOTTOM, 0, 0, 0, 0,
+                                SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        except Exception:
+            pass
+
     # -- 锁定（点击穿透，纯展示） -------------------------------------------- #
     def set_locked(self, locked: bool) -> None:
         self.locked = locked
@@ -1010,6 +1071,7 @@ def run(selftest: bool = False) -> int:
     w = Widget(api)
     w.refresh()                       # 先拉一次真实数据（失败也不崩）
     w.move(w.settings.value("pos", QPoint(90, 90)))
+    w.clamp_to_screen()
     w.setWindowOpacity(float(w.settings.value("opacity", 0.97)))
 
     if selftest:
@@ -1019,6 +1081,8 @@ def run(selftest: bool = False) -> int:
         print("translucent:", w.testAttribute(Qt.WA_TranslucentBackground))
         print("no-activate:", w.testAttribute(Qt.WA_ShowWithoutActivating))
         print("tasks loaded:", len(w.tasks), "| api error:", api.last_error or "-")
+        scr = QGuiApplication.primaryScreen().geometry()
+        print("window geometry:", w.geometry().getRect(), "| screen:", scr.getRect())
         w.panel.start_glow()
         w.show()
         app.processEvents()
@@ -1035,6 +1099,13 @@ def run(selftest: bool = False) -> int:
     act_lock = QAction("锁定（点击穿透）", menu, checkable=True)
     act_lock.toggled.connect(w.set_locked)
     menu.addAction(act_lock)
+    find_menu = menu.addMenu("找回挂件")
+    a_center = QAction("移到屏幕中央", find_menu)
+    a_center.triggered.connect(w.center_on_primary)
+    find_menu.addAction(a_center)
+    a_preview = QAction("置顶预览 6 秒（找不到它用这个）", find_menu)
+    a_preview.triggered.connect(lambda: w.preview_on_top(6))
+    find_menu.addAction(a_preview)
     op_menu = menu.addMenu("透明度")
     for label, val in (("100%", 1.0), ("97%", 0.97), ("85%", 0.85), ("70%", 0.70)):
         a = QAction(label, op_menu)
@@ -1057,6 +1128,7 @@ def run(selftest: bool = False) -> int:
 
     w.panel.start_glow()
     w.show()
+    w._start_bottom_keepalive()
     return app.exec()
 
 

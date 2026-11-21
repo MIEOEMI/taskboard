@@ -1,0 +1,56 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install PySide6 pyinstaller
+      - name: Build single-file exe
+        run: pyinstaller --noconfirm --onefile --windowed --name TaskBoard --collect-all tzdata taskboard.py
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskBoard-windows
+          path: dist/TaskBoard.exe
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/TaskBoard.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install PySide6 pyinstaller
+      - name: Build single-file binary
+        run: pyinstaller --noconfirm --onefile --name TaskBoard --collect-all tzdata taskboard.py
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskBoard-linux
+          path: dist/TaskBoard
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/TaskBoard
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
