@@ -15,10 +15,10 @@ https://github.com/MIEOEMI/taskboard/releases/latest
 
 ## 用之前
 
-在可执行文件**旁边**放一个 `.env`：
+在可执行文件**旁边**放一个 `.env`（可参考仓库里的 `.env.example`）：
 
 ```
-VIKUNJA_URL=https://tasks.funnycode.site
+VIKUNJA_URL=https://your-vikunja.example.com
 VIKUNJA_USER=你的用户名
 VIKUNJA_PASS=你的密码
 VIKUNJA_PROJECT=2

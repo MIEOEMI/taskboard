@@ -2,3 +2,12 @@ target/
 __pycache__/
 *.pyc
 .idea/
+.vscode/
+
+# ---- 凭据：绝对不要提交 ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
