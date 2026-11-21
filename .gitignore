@@ -2,7 +2,9 @@ target/
 __pycache__/
 *.pyc
 .idea/
-.vscode/
+
+# ---- 临时产物 ----
+*.raw
 
 # ---- 凭据：绝对不要提交 ----
 .env
