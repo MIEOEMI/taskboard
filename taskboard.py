@@ -47,7 +47,11 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
-TZ = ZoneInfo("Asia/Shanghai")
+try:
+    TZ = ZoneInfo("Asia/Shanghai")
+except Exception:                                   # Windows 没装 tzdata 包时兜底
+    from datetime import timezone, timedelta as _td
+    TZ = timezone(_td(hours=8))                     # 北京=固定 UTC+8，无夏令时，语义等价
 REFRESH_MS = 10_000
 COLUMNS = (("today", "今天"), ("soon", "未来 7 天"), ("later", "以后"))
 
