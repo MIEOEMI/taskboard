@@ -3,7 +3,7 @@
 //! 用法：
 //!   taskboard               正常启动（托盘 + 置底 + 10 秒同步）
 //!   taskboard --no-tray     不创建托盘（无系统托盘的环境）
-//!   taskboard --no-anim     关闭动效（光斑定格、不做呼吸/入场动画）
+//!   taskboard --no-anim     关闭任务入场和收起动画
 //!   taskboard --selftest    无头自检：拉任务渲染一帧，打印任务数与窗口尺寸后退出
 //!
 //! 凭据优先级：环境变量 VIKUNJA_* → ~/.config/vikunja/env → exe 同目录 .env
@@ -79,17 +79,7 @@ fn sig_of(tasks: &[Value]) -> Vec<(i64, String, String, i64)> {
     sig
 }
 
-fn accent_color(info: &TaskInfo, overdue: bool) -> slint::Color {
-    if overdue {
-        slint::Color::from_rgb_u8(255, 107, 107) // RED
-    } else if info.priority >= 3 {
-        slint::Color::from_rgb_u8(242, 181, 68) // AMBER
-    } else {
-        slint::Color::from_rgb_u8(77, 159, 255) // BLUE
-    }
-}
-
-/// 按三列重建模型；respect_new=true 时只有新任务播错峰入场动画。
+/// 按三列重建模型；respect_new=true 时只有新任务播放入场动画。
 fn rebuild_models(app: &AppWindow, models: &Models, shared: &mut Shared, respect_new: bool) {
     let now = parse::now_shanghai();
     let mut buckets: [Vec<TaskData>; 3] = [Vec::new(), Vec::new(), Vec::new()];
@@ -113,7 +103,6 @@ fn rebuild_models(app: &AppWindow, models: &Models, shared: &mut Shared, respect
             id: info.id as i32,
             title: SharedString::from(info.title.clone()),
             time: SharedString::from(label),
-            accent: accent_color(info, overdue),
             overdue,
             high: info.priority >= 3,
             is_new,
@@ -402,6 +391,7 @@ fn main() {
         s.set_today(ModelRc::from(models.today.clone()));
         s.set_soon(ModelRc::from(models.soon.clone()));
         s.set_later(ModelRc::from(models.later.clone()));
+        s.set_motion_enabled(!no_anim);
     }
 
     let shared = Rc::new(RefCell::new(Shared::default()));
@@ -500,8 +490,12 @@ fn main() {
         let tx = tx_worker.clone();
         let s = app.global::<Store>();
         s.on_add_task(move |raw| {
+            let raw = raw.trim();
+            if raw.is_empty() {
+                return;
+            }
             let now = parse::now_shanghai();
-            let (title, due, prio) = parse::parse(raw.trim(), now);
+            let (title, due, prio) = parse::parse(raw, now);
             let _ = tx.send(WorkerCmd::Add(title, due, prio as i64));
         });
     }
@@ -549,7 +543,6 @@ fn main() {
                 let st = app.global::<Store>();
                 match msg {
                     UiMsg::Tasks(r) => {
-                        st.set_busy(false);
                         match r {
                             Ok(tasks) => {
                                 let mut sh = shared.borrow_mut();
@@ -643,23 +636,6 @@ fn main() {
         });
     }
 
-    // ---- 时钟：驱动光斑漂移 / 呼吸 / 入场动画 ----
-    if !no_anim {
-        let weak = app.as_weak();
-        let clock_timer = Box::leak(Box::new(slint::Timer::default()));
-        let mut tick = 0u64;
-        // 15fps：光斑 18s 一轮，肉眼足够顺滑；50ms(20fps) 在软件渲染下 CPU 偏高
-        clock_timer.start(slint::TimerMode::Repeated, Duration::from_millis(66), move || {
-            tick += 1;
-            if let Some(app) = weak.upgrade() {
-                let t = tick as f64 * 0.066;
-                let st = app.global::<Store>();
-                st.set_clock(t as f32);
-                st.set_phase(((t % 18.0) / 18.0) as f32);
-            }
-        });
-    }
-
     #[cfg(target_os = "windows")]
 fn push_top(hwnd: isize, on: bool) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -699,7 +675,6 @@ fn set_topmost(app: &AppWindow, on: bool) {
     {
         let tx = tx_worker.clone();
         let st = app.global::<Store>();
-        st.set_busy(true);
         st.set_status_color(slint::Color::from_rgb_u8(77, 159, 255));
         st.set_status_text("同步中…".into());
         let _ = tx.send(WorkerCmd::Refresh);

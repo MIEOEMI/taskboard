@@ -3,7 +3,6 @@ export struct TaskData {
     id: int,
     title: string,
     time: string,
-    accent: color,
     overdue: bool,
     high: bool,
     is-new: bool,
@@ -20,9 +19,7 @@ export global Store {
     in-out property <int> n-total: 0;
     in-out property <string> status-text: "启动中…";
     in-out property <color> status-color: #4c9f70;
-    in-out property <bool> busy: false;
-    in-out property <float> clock: 0;      // 秒（Rust 侧 50ms 推进，驱动呼吸/入场动画）
-    in-out property <float> phase: 0.17;   // 0..1 光斑漂移相位（18 秒一轮）
+    in-out property <bool> motion-enabled: true;
 
     callback done(int);
     callback add-task(string);
