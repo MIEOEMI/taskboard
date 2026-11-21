@@ -648,10 +648,11 @@ fn main() {
         let weak = app.as_weak();
         let clock_timer = Box::leak(Box::new(slint::Timer::default()));
         let mut tick = 0u64;
-        clock_timer.start(slint::TimerMode::Repeated, Duration::from_millis(50), move || {
+        // 15fps：光斑 18s 一轮，肉眼足够顺滑；50ms(20fps) 在软件渲染下 CPU 偏高
+        clock_timer.start(slint::TimerMode::Repeated, Duration::from_millis(66), move || {
             tick += 1;
             if let Some(app) = weak.upgrade() {
-                let t = tick as f64 * 0.05;
+                let t = tick as f64 * 0.066;
                 let st = app.global::<Store>();
                 st.set_clock(t as f32);
                 st.set_phase(((t % 18.0) / 18.0) as f32);
