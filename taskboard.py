@@ -38,7 +38,8 @@ from PySide6.QtCore import (
     QSettings, Qt, QTimer, QVariantAnimation, Signal,
 )
 from PySide6.QtGui import (
-    QAction, QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap,
+    QAction, QBrush, QColor, QFont, QIcon, QLinearGradient, QPainter,
+    QPainterPath, QPen, QPixmap, QRadialGradient,
 )
 from PySide6.QtWidgets import (
     QApplication, QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
@@ -600,6 +601,95 @@ class TaskRow(QFrame):
 
 
 # --------------------------------------------------------------------------- #
+# 玻璃面板：渐变底 + 漂移极光光斑 + 顶部高光 + 内描边
+# --------------------------------------------------------------------------- #
+class GlowPanel(QFrame):
+    """自绘背景。
+
+    为什么不用 QSS：qlineargradient 只能画静态渐变，做不出「光在流动」的观感。
+    这里用 QPainter 画三层——基础玻璃渐变、三团缓慢漂移的径向光斑（青绿/蓝/紫）、
+    顶部高光带，再叠 1px 内描边，整体裁进 18px 圆角里。
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("panel")
+        self._phase = 0.0
+        self._anim = QVariantAnimation(self)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.setDuration(18_000)          # 18 秒一轮，慢到不抢注意力
+        self._anim.setLoopCount(-1)
+        self._anim.setEasingCurve(QEasingCurve.Linear)
+        self._anim.valueChanged.connect(self._on_phase)
+
+    def start_glow(self) -> None:
+        if ANIM:
+            self._anim.start()
+        else:
+            self._on_phase(0.17)                 # 静止时定格在一个好看的相位
+
+    def _on_phase(self, v) -> None:
+        self._phase = float(v)
+        self.update()
+
+    def paintEvent(self, e) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        path = QPainterPath()
+        path.addRoundedRect(r, 18.0, 18.0)
+        p.setClipPath(path)
+
+        # 1) 基础玻璃渐变（左上偏亮 → 右下近黑）
+        base = QLinearGradient(r.topLeft(), QPointF(r.right(), r.bottom()))
+        base.setColorAt(0.00, QColor(32, 39, 53, 247))
+        base.setColorAt(0.55, QColor(21, 25, 34, 245))
+        base.setColorAt(1.00, QColor(12, 15, 22, 249))
+        p.fillPath(path, QBrush(base))
+
+        # 2) 三团漂移光斑：各自不同频率/相位，永不重复
+        ph = self._phase * math.tau
+        blobs = (
+            (0.16 + 0.08 * math.sin(ph),          0.06 + 0.07 * math.cos(ph * 0.8),
+             1.25, QColor(64, 220, 150, 132)),     # 青绿：左上
+            (0.88 + 0.07 * math.cos(ph * 0.9),    0.02 + 0.08 * math.sin(ph * 1.1),
+             1.15, QColor(70, 150, 255, 120)),     # 蓝：右上
+            (0.50 + 0.14 * math.sin(ph * 0.7 + 1.2), 1.06 + 0.07 * math.cos(ph * 0.8),
+             1.45, QColor(165, 105, 255, 112)),    # 紫：底部
+        )
+        for cx, cy, rad, col in blobs:
+            center = QPointF(r.width() * cx, r.height() * cy)
+            grad = QRadialGradient(center, max(r.width(), r.height()) * rad * 0.5)
+            grad.setColorAt(0.00, col)
+            mid = QColor(col)
+            mid.setAlpha(max(0, int(col.alpha() * 0.42)))
+            grad.setColorAt(0.50, mid)
+            grad.setColorAt(1.00, QColor(col.red(), col.green(), col.blue(), 0))
+            p.fillPath(path, QBrush(grad))
+
+        # 3) 顶部高光带：玻璃被光打到的感觉
+        sheen = QLinearGradient(QPointF(0, r.top()), QPointF(0, r.top() + r.height() * 0.42))
+        sheen.setColorAt(0.00, QColor(255, 255, 255, 26))
+        sheen.setColorAt(0.45, QColor(255, 255, 255, 9))
+        sheen.setColorAt(1.00, QColor(255, 255, 255, 0))
+        p.fillPath(path, QBrush(sheen))
+
+        # 4) 内描边（裁切内的 1px，避免盖到圆角外）
+        p.setClipping(False)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(QColor(255, 255, 255, 40), 1.0))
+        p.drawPath(path)
+
+        # 5) 顶边一道更亮的细线，强化「浮起」的厚度感
+        top_line = QPainterPath()
+        top_line.moveTo(r.left() + 18, r.top() + 0.8)
+        top_line.lineTo(r.right() - 18, r.top() + 0.8)
+        p.setPen(QPen(QColor(255, 255, 255, 62), 1.0))
+        p.drawPath(top_line)
+
+
+# --------------------------------------------------------------------------- #
 # 挂件窗口
 # --------------------------------------------------------------------------- #
 class Widget(QWidget):
@@ -626,18 +716,10 @@ class Widget(QWidget):
         outer.setContentsMargins(18, 18, 18, 18)   # 给投影留空间
         outer.setSpacing(0)
 
-        panel = QFrame(self)
-        panel.setObjectName("panel")
+        panel = GlowPanel(self)
         panel.setStyleSheet(
             "QWidget { background: transparent; }"
             "QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }"
-            "#panel {"
-            " background: qlineargradient(x1:0, y1:0, x2:0.9, y2:1,"
-            "   stop:0 rgba(30, 36, 49, 246), stop:0.55 rgba(21, 25, 34, 244),"
-            "   stop:1 rgba(15, 18, 25, 246));"
-            " border-radius: 18px;"
-            " border: 1px solid rgba(255, 255, 255, 30);"
-            "}"
             "QLabel { color: #eef2f8; background: transparent; }"
             "QLabel#dim { color: #8b93a3; }"
             "QLabel#hint { color: #6b7484; }"
@@ -663,6 +745,7 @@ class Widget(QWidget):
         shadow.setColor(QColor(0, 0, 0, 165))
         panel.setGraphicsEffect(shadow)
         outer.addWidget(panel)
+        self.panel = panel
 
         lay = QVBoxLayout(panel)
         lay.setContentsMargins(16, 13, 16, 11)
@@ -932,6 +1015,7 @@ def run(selftest: bool = False) -> int:
         print("translucent:", w.testAttribute(Qt.WA_TranslucentBackground))
         print("no-activate:", w.testAttribute(Qt.WA_ShowWithoutActivating))
         print("tasks loaded:", len(w.tasks), "| api error:", api.last_error or "-")
+        w.panel.start_glow()
         w.show()
         app.processEvents()
         img = w.grab()
@@ -967,6 +1051,7 @@ def run(selftest: bool = False) -> int:
     timer.timeout.connect(w.refresh)
     timer.start(REFRESH_MS)
 
+    w.panel.start_glow()
     w.show()
     return app.exec()
 

@@ -21,7 +21,7 @@
 # Windows（PowerShell）
 py -3 -m venv .venv
 .venv\Scripts\activate
-pip install PySide6
+pip install PySide6 tzdata    # tzdata 必装：Windows 没有自带时区库，缺它启动即崩
 python taskboard.py
 
 # Ubuntu
