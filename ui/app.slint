@@ -7,7 +7,7 @@ import { Pill } from "widgets.slint";
 
 export component AppWindow inherits Window {
     width: 760px;
-    height: 452px;
+    height: 316px;
     no-frame: true;
     title: "TaskBoardWidget";
     background: transparent;
@@ -67,26 +67,38 @@ export component AppWindow inherits Window {
         Rectangle {
             x: parent.width * (0.16 + 0.08 * Math.sin(k * 1deg)) - self.width / 2;
             y: parent.height * (0.06 + 0.07 * Math.cos(k * 0.8 * 1deg)) - self.height / 2;
-            width: 640px;
-            height: 640px;
+            width: 420px;
+            height: 420px;
             background: @radial-gradient(circle,
-                #40dc9684 0%, #40dc966b 50%, #40dc9600 100%);   // 青绿
+                #40dc9638 0%, #40dc9620 45%, #40dc9600 100%);   // 青绿
         }
         Rectangle {
             x: parent.width * (0.88 + 0.07 * Math.cos(k * 0.9 * 1deg)) - self.width / 2;
             y: parent.height * (0.02 + 0.08 * Math.sin(k * 1.1 * 1deg)) - self.height / 2;
-            width: 588px;
-            height: 588px;
+            width: 400px;
+            height: 400px;
             background: @radial-gradient(circle,
-                #4696ff78 0%, #4696ff50 50%, #4696ff00 100%);   // 蓝
+                #4696ff32 0%, #4696ff1c 45%, #4696ff00 100%);   // 蓝
         }
         Rectangle {
             x: parent.width * (0.50 + 0.14 * Math.sin(k * 0.7 * 1deg + 68.8deg)) - self.width / 2;
             y: parent.height * (1.06 + 0.07 * Math.cos(k * 0.8 * 1deg)) - self.height / 2;
-            width: 742px;
-            height: 742px;
+            width: 460px;
+            height: 460px;
             background: @radial-gradient(circle,
-                #a569ff70 0%, #a569ff48 50%, #a569ff00 100%);   // 紫
+                #a569ff30 0%, #a569ff1a 45%, #a569ff00 100%);   // 紫
+        }
+
+        // ---- 压光罩：把光斑压回背景，保证正文对比度（否则整块被染绿/紫） ----
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            background: @linear-gradient(160deg,
+                rgba(16, 19, 27, 0.42) 0%,
+                rgba(12, 14, 20, 0.30) 55%,
+                rgba(10, 12, 18, 0.46) 100%);
         }
 
         // ---- 顶部高光带：玻璃被光打到的感觉 ----

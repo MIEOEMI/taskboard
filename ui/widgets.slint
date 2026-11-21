@@ -174,10 +174,12 @@ export component Column inherits Rectangle {
     in property <color> dot-color;
     in property <int> pill-text;
     background: transparent;
-    // 在父级 HorizontalLayout 里三等分，且纵向撑满（否则高度塌成 0，整列不可见）
+    // 在父级 HorizontalLayout 里三等分：preferred-width 置 0 让拉伸均分，
+    // 否则长标题会把该列撑宽、把别的列挤窄（会出现「CV拼图 ...」这种截断）
     horizontal-stretch: 1;
     vertical-stretch: 1;
-    min-width: 180px;
+    preferred-width: 0px;
+    min-width: 0px;
 
     VerticalLayout {
         spacing: 5px;
