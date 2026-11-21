@@ -55,7 +55,7 @@ BLUE = QColor("#4d9fff")
 AMBER = QColor("#f2b544")
 RED = QColor("#ff6b6b")
 TXT = "#eef2f8"
-DIM = "#8b93a3"
+DIM = "#a9b2c0"
 
 ANIM = True          # 全局动效开关（selftest / --no-anim 时关掉）
 
@@ -447,7 +447,7 @@ class TaskRow(QFrame):
             self._accent = QColor(AMBER)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(9, 5, 8, 5)
+        lay.setContentsMargins(8, 6, 8, 6)
         lay.setSpacing(8)
 
         self.check = AnimCheck()
@@ -457,10 +457,7 @@ class TaskRow(QFrame):
         # 颜色写死在 HTML 里：富文本走调色板，深色面板上会变成看不见的深灰
         markup = f"<span style='color:{TXT}'>{text}</span>"
         if prio >= 3:
-            markup += f" &nbsp;<span style='color:{AMBER.css_hue if False else '#f2b544'}'>●</span>"
-        if stamp:
-            col = "#ff6b6b" if overdue else DIM
-            markup += f"&nbsp;&nbsp;<span style='color:{col}'>{stamp}</span>"
+            markup += " &nbsp;<span style='color:#f2b544'>●</span>"
         self.label = QLabel(markup)
         self.label.setTextFormat(Qt.RichText)
         self.label.setWordWrap(True)
@@ -468,6 +465,15 @@ class TaskRow(QFrame):
 
         lay.addWidget(self.check, 0, Qt.AlignTop)
         lay.addWidget(self.label, 1, Qt.AlignTop)
+
+        # 时间单独一格、右对齐：标题再长也不会把它挤到第二行
+        if stamp:
+            self.time_lbl = QLabel(stamp)
+            self.time_lbl.setStyleSheet(
+                f"font-size: 10px; color:{'#ff8080' if overdue else DIM}; background: transparent;")
+            self.time_lbl.setAlignment(Qt.AlignRight | Qt.AlignTop)
+            self.time_lbl.setFixedWidth(56)
+            lay.addWidget(self.time_lbl, 0, Qt.AlignTop)
 
         # 逾期呼吸点
         if overdue:
@@ -806,9 +812,9 @@ class Widget(QWidget):
                 row.checked.connect(self.on_done)
                 body.addWidget(row)
             if not rows:
-                empty = QLabel("—")
+                empty = QLabel("暂无任务")
                 empty.setObjectName("hint")
-                empty.setStyleSheet("font-size: 11px; padding: 2px 2px;")
+                empty.setStyleSheet("font-size: 10px; padding: 3px 2px;")
                 body.addWidget(empty)
             body.addStretch(1)
             QTimer.singleShot(0, lambda s=self.scrolls[key], v=keep_scroll:
